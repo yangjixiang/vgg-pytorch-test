@@ -4,7 +4,7 @@ from torch import nn, optim
 import torchvision
 import sys
 
-#定义VGG各种不同的结构和最后的全连接层结构
+# 定义VGG各种不同的结构和最后的全连接层结构
 cfg = {
     'VGG11': [64, 'M', 128, 'M', 256,'M', 512, 'M', 512,'M'],
     'VGG13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
@@ -13,12 +13,15 @@ cfg = {
     'FC':    [512*7*7, 4096, 10]
 }
 
-#将数据展开成二维数据，用在全连接层之前和卷积层之后
+
+# 将数据展开成二维数据，用在全连接层之前和卷积层之后
 class FlattenLayer(torch.nn.Module):
     def __init__(self):
         super(FlattenLayer, self).__init__()
+
     def forward(self, x): # x shape: (batch, *, *, ...)
         return x.view(x.shape[0], -1)
+
 
 class VGG(nn.Module):
     # nn.Module是一个特殊的nn模块，加载nn.Module，这是为了继承父类
@@ -27,14 +30,16 @@ class VGG(nn.Module):
         # super 加载父类中的__init__()函数
         self.VGG_layer = self.vgg_block(cfg[vgg_name])
         self.FC_layer = self.fc_block(cfg['FC'])
-    #前向传播算法
+
+    # 前向传播算法
     def forward(self, x):
         out_vgg = self.VGG_layer(x)
         out = out_vgg.view(out_vgg.size(0), -1)
         # 这一步将out拉成out.size(0)的一维向量
         out = self.FC_layer(out_vgg)
         return out
-    #VGG模块
+
+    # VGG模块
     def vgg_block(self, cfg_vgg):
         layers = []
         in_channels = 1
@@ -47,7 +52,8 @@ class VGG(nn.Module):
                 layers.append(nn.ReLU(inplace=True))
                 in_channels = out_channels
         return nn.Sequential(*layers)
-    #全连接模块
+
+    # 全连接模块
     def fc_block(self, cfg_fc):
         fc_net = nn.Sequential()
         fc_features, fc_hidden_units, fc_output_units = cfg_fc[0:]
@@ -63,8 +69,9 @@ class VGG(nn.Module):
         ))
         return fc_net
 
-#加载MNIST数据，返回训练数据集和测试数据集
-def load_data_fashion_mnist(batch_size, resize=None, root='~/chnn/Datasets/FashionMNIST'):
+
+# 加载MNIST数据，返回训练数据集和测试数据集
+def load_data_fashion_mnist(batch_size, resize=None, root='~/FashionMNIST'):
     """Download the fashion mnist dataset and then load into memory."""
     trans = []
     if resize:
@@ -72,18 +79,27 @@ def load_data_fashion_mnist(batch_size, resize=None, root='~/chnn/Datasets/Fashi
     trans.append(torchvision.transforms.ToTensor())
 
     transform = torchvision.transforms.Compose(trans)
-    mnist_train = torchvision.datasets.FashionMNIST(root=root, train=True, download=True, transform=transform)
-    mnist_test = torchvision.datasets.FashionMNIST(root=root, train=False, download=True, transform=transform)
+    mnist_train = torchvision.datasets.FashionMNIST(root=root, train=True,
+                                                    download=True,
+                                                    transform=transform)
+    mnist_test = torchvision.datasets.FashionMNIST(root=root, train=False,
+                                                   download=True,
+                                                   transform=transform)
     if sys.platform.startswith('win'):
         num_workers = 0  # 0表示不用额外的进程来加速读取数据
     else:
         num_workers = 4
-    train_iter = torch.utils.data.DataLoader(mnist_train, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    test_iter = torch.utils.data.DataLoader(mnist_test, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    train_iter = torch.utils.data.DataLoader(mnist_train, batch_size=batch_size,
+                                             shuffle=True,
+                                             num_workers=num_workers)
+    test_iter = torch.utils.data.DataLoader(mnist_test, batch_size=batch_size,
+                                            shuffle=False,
+                                            num_workers=num_workers)
 
     return train_iter, test_iter
 
-#测试准确率
+
+# 测试准确率
 def evaluate_accuracy(data_iter, net, device=None):
     if device is None and isinstance(net, torch.nn.Module):
         # 如果没指定device就使用net的device
@@ -104,8 +120,10 @@ def evaluate_accuracy(data_iter, net, device=None):
             n += y.shape[0]
     return acc_sum / n
 
-#模型训练，定义损失函数、优化函数
-def train_ch5(net, train_iter, test_iter, batch_size, optimizer, device, num_epochs):
+
+# 模型训练，定义损失函数、优化函数
+def train_ch5(net, train_iter, test_iter, batch_size,
+              optimizer, device, num_epochs):
     net = net.to(device)
     print("training on ", device)
     loss = torch.nn.CrossEntropyLoss()
@@ -128,20 +146,32 @@ def train_ch5(net, train_iter, test_iter, batch_size, optimizer, device, num_epo
         print('epoch %d, loss %.4f, train acc %.3f, test acc %.3f, time %.1f sec'
               % (epoch + 1, train_l_sum / batch_count, train_acc_sum / n, test_acc, time.time() - start))
 
+
 def main():
     net = VGG('VGG16')
     print(net)
 
-    #一个batch_size为64张图片，进行梯度下降更新参数
-    batch_size = 64
-    #使用cuda来训练
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    #加载MNIST数据集，返回训练集和测试集
-    train_iter, test_iter = load_data_fashion_mnist(batch_size, resize=224)
-    lr, num_epochs = 0.001, 5
-    #使用Adam优化算法替代传统的SGD，能够自适应学习率
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-    #训练--迭代更新参数
-    train_ch5(net, train_iter, test_iter, batch_size, optimizer, device, num_epochs)
+    # 一个batch_size为64张图片，进行梯度下降更新参数
+    batch_size = 48
 
-main()
+    # 使用cuda来训练
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    torch.cuda.set_device(1)
+
+    # 加载MNIST数据集，返回训练集和测试集
+    root = '/media/server/Files/DataSet/Public/MNIST/'
+    train_iter, test_iter = load_data_fashion_mnist(batch_size,
+                                                    resize=224,
+                                                    root=root)
+    lr, num_epochs = 0.001, 5
+
+    # 使用Adam优化算法替代传统的SGD，能够自适应学习率
+    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+
+    # 训练--迭代更新参数
+    train_ch5(net, train_iter, test_iter, batch_size,
+              optimizer, device, num_epochs)
+
+
+if __name__ == main():
+    main()
